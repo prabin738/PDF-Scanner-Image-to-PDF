@@ -1,4 +1,3 @@
-// // src/navigation/RootNavigator.tsx
 // import React from "react";
 // import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // import { HomeScreen } from "../screens/HomeScreen";
@@ -7,8 +6,9 @@
 
 // export type RootStackParamList = {
 //   Home: undefined;
-//   Camera: undefined;
-//   Edit: { images: string[] }; // Pass captured image URIs here
+//   // NEW: Camera now accepts optional params for the Retake flow
+//   Camera: { replaceIndex?: number; existingImages?: string[] } | undefined;
+//   Edit: { images: string[] };
 // };
 
 // const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -32,9 +32,17 @@ import { EditScreen } from "../screens/EditScreen";
 
 export type RootStackParamList = {
   Home: undefined;
-  // NEW: Camera now accepts optional params for the Retake flow
-  Camera: { replaceIndex?: number; existingImages?: string[] } | undefined;
-  Edit: { images: string[] };
+  Camera:
+    | {
+        replaceIndex?: number;
+        existingImages?: string[];
+        appendMode?: boolean; // NEW: Tells camera to add to existing batch
+      }
+    | undefined;
+  Edit: {
+    images: string[];
+    initialIndex?: number; // NEW: Tells Edit Screen which page to focus
+  };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

@@ -4,7 +4,7 @@
 // import { Feather } from "@expo/vector-icons";
 // import { useNavigation, useRoute } from "@react-navigation/native";
 // import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-// import { SafeAreaView } from "react-native-safe-area-context"; // Fixes the SafeAreaView warning
+// import { SafeAreaView } from "react-native-safe-area-context";
 // import { RootStackParamList } from "../navigation/RootNavigator";
 // import {
 //   widthPercentageToDP as wp,
@@ -81,10 +81,10 @@
 
 //   return (
 //     <View style={styles.container}>
-//       {/* 1. Camera gets flex: 1 (Like your old working code) */}
+//       {/* 1. Camera gets flex: 1 to fill the entire screen */}
 //       <CameraView style={styles.camera} ref={cameraRef} />
 
-//       {/* 2. UI is placed absolutely OVER the camera to fix the children warning */}
+//       {/* 2. UI is placed absolutely OVER the camera */}
 //       <SafeAreaView style={styles.absoluteOverlay} pointerEvents="box-none">
 //         {/* Top Controls */}
 //         <View style={styles.topBar}>
@@ -104,10 +104,8 @@
 //           </View>
 //         </View>
 
-//         {/* Middle Document Bounding Box */}
-//         <View style={styles.overlayContainer} pointerEvents="none">
-//           <View style={styles.boundingBox} />
-//         </View>
+//         {/* Empty spacer to push bottomBar to the bottom without the blue box */}
+//         <View style={{ flex: 1 }} pointerEvents="none" />
 
 //         {/* Bottom Controls */}
 //         <View style={styles.bottomBar}>
@@ -211,15 +209,6 @@
 //     borderRadius: 12,
 //   },
 //   retakeText: { color: "white", fontSize: 12, fontWeight: "bold" },
-//   overlayContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-//   boundingBox: {
-//     width: wp("80%"),
-//     height: hp("50%"),
-//     borderWidth: 2,
-//     borderColor: COLORS.primary,
-//     borderRadius: 10,
-//     backgroundColor: "rgba(0, 168, 132, 0.1)",
-//   },
 //   bottomBar: {
 //     backgroundColor: "rgba(0,0,0,0.8)", // slightly darker background to see controls clearly
 //     paddingBottom: hp("4%"),
@@ -294,7 +283,7 @@ import React, { useState, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Feather } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native"; // Add RouteProp here
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -304,27 +293,32 @@ import {
 } from "react-native-responsive-screen";
 import { COLORS, TYPOGRAPHY } from "../theme";
 
-type CameraScreenRouteProp = {
-  params?: {
-    replaceIndex?: number;
-    existingImages?: string[];
-  };
-};
+// 1. Tell TypeScript this route belongs specifically to the Camera screen
+type CameraScreenRouteProp = RouteProp<RootStackParamList, "Camera">;
 
 export const CameraScreen = () => {
   const [permission, requestPermission] = useCameraPermissions();
-  const [mode, setMode] = useState<"single" | "batch">("single");
-  const [batchImages, setBatchImages] = useState<string[]>([]);
-  const cameraRef = useRef<CameraView>(null);
 
+  // 2. Use the proper RouteProp type
+  const route = useRoute<CameraScreenRouteProp>();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute<CameraScreenRouteProp>();
 
-  // Extract Retake parameters if they exist
+  // Because route.params can be undefined in RootStackParamList, we add safe checks (?)
   const isRetakeMode = route.params?.replaceIndex !== undefined;
   const replaceIndex = route.params?.replaceIndex;
-  const existingImages = route.params?.existingImages;
+  const existingImages = route.params?.existingImages || [];
+  const isAppendMode = route.params?.appendMode;
+
+  const [mode, setMode] = useState<"single" | "batch">(
+    isAppendMode ? "batch" : "single",
+  );
+  const [batchImages, setBatchImages] = useState<string[]>(
+    isAppendMode ? existingImages : [],
+  );
+  const cameraRef = useRef<CameraView>(null);
+
+  // ... the rest of your CameraScreen code stays exactly the same ...
 
   if (!permission) return <View />;
   if (!permission.granted) {
@@ -348,14 +342,18 @@ export const CameraScreen = () => {
       const photo = await cameraRef.current.takePictureAsync();
       if (photo?.uri) {
         // SCENARIO 1: Retaking a specific page
-        if (isRetakeMode && existingImages && replaceIndex !== undefined) {
+        if (isRetakeMode && replaceIndex !== undefined) {
           const updatedImages = [...existingImages];
           updatedImages[replaceIndex] = photo.uri;
-          navigation.navigate("Edit", { images: updatedImages });
+          // Navigate back AND tell EditScreen to focus on this exact page
+          navigation.navigate("Edit", {
+            images: updatedImages,
+            initialIndex: replaceIndex,
+          });
         }
         // SCENARIO 2: Single Mode
         else if (mode === "single") {
-          navigation.navigate("Edit", { images: [photo.uri] });
+          navigation.navigate("Edit", { images: [photo.uri], initialIndex: 0 });
         }
         // SCENARIO 3: Batch Mode
         else {
@@ -367,16 +365,18 @@ export const CameraScreen = () => {
 
   const finishBatch = () => {
     if (batchImages.length > 0) {
-      navigation.navigate("Edit", { images: batchImages });
+      // Navigate to EditScreen and focus on the very last image taken
+      navigation.navigate("Edit", {
+        images: batchImages,
+        initialIndex: batchImages.length - 1,
+      });
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* 1. Camera gets flex: 1 to fill the entire screen */}
       <CameraView style={styles.camera} ref={cameraRef} />
 
-      {/* 2. UI is placed absolutely OVER the camera */}
       <SafeAreaView style={styles.absoluteOverlay} pointerEvents="box-none">
         {/* Top Controls */}
         <View style={styles.topBar}>
@@ -396,7 +396,6 @@ export const CameraScreen = () => {
           </View>
         </View>
 
-        {/* Empty spacer to push bottomBar to the bottom without the blue box */}
         <View style={{ flex: 1 }} pointerEvents="none" />
 
         {/* Bottom Controls */}
@@ -463,7 +462,6 @@ export const CameraScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "black" },
   camera: { flex: 1 },
-  // absoluteOverlay ensures the UI floats on top of the camera layer
   absoluteOverlay: {
     position: "absolute",
     top: 0,
@@ -502,7 +500,7 @@ const styles = StyleSheet.create({
   },
   retakeText: { color: "white", fontSize: 12, fontWeight: "bold" },
   bottomBar: {
-    backgroundColor: "rgba(0,0,0,0.8)", // slightly darker background to see controls clearly
+    backgroundColor: "rgba(0,0,0,0.8)",
     paddingBottom: hp("4%"),
     paddingTop: hp("2%"),
   },
